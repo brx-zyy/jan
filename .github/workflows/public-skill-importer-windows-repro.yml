@@ -46,6 +46,12 @@ jobs:
           .\repro.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Provide build-time Bun resource placeholder for test compilation
+        shell: pwsh
+        run: |
+          $resource = 'src-tauri/resources/bin/bun-x86_64-pc-windows-msvc.exe'
+          New-Item -ItemType Directory -Force (Split-Path $resource) | Out-Null
+          if (-not (Test-Path $resource)) { [System.IO.File]::WriteAllBytes($resource, [byte[]]@()) }
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
