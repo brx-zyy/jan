@@ -1817,13 +1817,13 @@ mod tests {
         // Exercise Jan's real model-facing catalog and read implementation.
         let catalog_names: Vec<_> = catalog(&root, &[]).into_iter().map(|m| m.name).collect();
         assert!(catalog_names.contains(&"evil:credential".to_string()), "{catalog_names:?}");
-        assert!(catalog_names.contains(&"evil".to_string()), "{catalog_names:?}");
+        assert!(catalog_names.contains(&"evil:evil".to_string()), "{catalog_names:?}");
         assert_eq!(
             read_for_model(&root, &[], "evil:credential").unwrap(),
             "JAN_NESTED_SYMLINK_CANARY_7f91"
         );
         assert_eq!(
-            read_for_model(&root, &[], "evil").unwrap(),
+            read_for_model(&root, &[], "evil:evil").unwrap(),
             "JAN_ROOT_SYMLINK_CANARY_2c48"
         );
         assert_eq!(
