@@ -20,18 +20,13 @@ jobs:
               let temp = std::env::temp_dir().join(format!("jan-skill-import-poc-{}", std::process::id()));
               let skill_root = temp.join("skills").join("pdf");
               fs::create_dir_all(&skill_root).unwrap();
-
-              // Exact guard used by the importer: only '/' is treated as a separator.
               let path = format!("skills/pdf/..{}..{}outside-canary.txt", char::from(92), char::from(92));
               let prefix = "skills/pdf/";
               let rel = path.strip_prefix(prefix).unwrap().to_string();
               assert!(!rel.split('/').any(|seg| seg == ".."), "guard unexpectedly rejected path");
-
-              // On Windows, PathBuf interprets backslashes as separators.
               let target = skill_root.join(&rel);
               fs::create_dir_all(target.parent().unwrap()).unwrap();
               fs::write(&target, "harmless external canary").unwrap();
-
               let escaped = temp.join("outside-canary.txt");
               assert!(escaped.exists(), "canary was not written outside skill directory: {}", target.display());
               assert_eq!(fs::read_to_string(&escaped).unwrap(), "harmless external canary");
@@ -46,14 +41,19 @@ jobs:
           .\repro.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Provide build-time Bun resource placeholder for test compilation
+      - name: Provide build-time resource placeholders for test compilation
         shell: pwsh
         run: |
-          $resource = 'src-tauri/resources/bin/bun-x86_64-pc-windows-msvc.exe'
-          New-Item -ItemType Directory -Force (Split-Path $resource) | Out-Null
-          if (-not (Test-Path $resource)) { [System.IO.File]::WriteAllBytes($resource, [byte[]]@()) }
-          $uv = 'src-tauri/resources/bin/uv-x86_64-pc-windows-msvc.exe'
-          if (-not (Test-Path $uv)) { [System.IO.File]::WriteAllBytes($uv, [byte[]]@()) }
+          $resources = @(
+            'src-tauri/resources/bin/bun-x86_64-pc-windows-msvc.exe',
+            'src-tauri/resources/bin/uv-x86_64-pc-windows-msvc.exe',
+            'src-tauri/resources/bin/jan-llama-worker.exe'
+          )
+          foreach ($resource in $resources) {
+            New-Item -ItemType Directory -Force (Split-Path $resource) | Out-Null
+            if (-not (Test-Path $resource)) { [System.IO.File]::WriteAllBytes($resource, [byte[]]@()) }
+          }
+
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
