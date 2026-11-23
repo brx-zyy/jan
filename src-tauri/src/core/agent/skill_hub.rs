@@ -147,13 +147,24 @@ pub async fn import(store: &Path, name: &str) -> Result<(), String> {
         fetched.push(result?);
     }
 
-    // Phase 2: replace the destination with the freshly fetched files. `store`
-    // is a store root (project or permanent); the caller resolved it.
+    write_fetched_files(
+        store,
+        &stem,
+        fetched.into_iter().map(|(rel, bytes)| (rel, bytes.to_vec())).collect(),
+    ).await
+}
+
+async fn write_fetched_files(
+    store: &Path,
+    stem: &str,
+    fetched: Vec<(String, Vec<u8>)>,
+) -> Result<(), String> {
+    // Phase 2: replace the destination with the freshly fetched files.
     let skills_dir = skills::skills_dir(store);
-    let dest_root = skills_dir.join(&stem);
+    let dest_root = skills_dir.join(stem);
     let flat = skills_dir.join(format!("{stem}.md"));
     let _ = tokio::fs::remove_dir_all(&dest_root).await;
-    let _ = tokio::fs::remove_file(&flat).await; // drop a legacy flat form, if any
+    let _ = tokio::fs::remove_file(&flat).await;
     for (rel, bytes) in fetched {
         let target = dest_root.join(&rel);
         if let Some(parent) = target.parent() {
@@ -181,22 +192,23 @@ mod tests {
     use super::*;
 
     #[cfg(windows)]
-    #[test]
-    fn public_skill_importer_allows_backslash_parent_escape() {
+    #[tokio::test]
+    async fn public_skill_importer_writes_backslash_traversal_outside_destination() {
         let temp = tempfile::tempdir().unwrap();
-        let dest_root = temp.path().join("skills").join("pdf");
-        std::fs::create_dir_all(&dest_root).unwrap();
+        let prefix = "skills/pdf/";
+        let malicious = format!("skills/pdf/..{}..{}outside-canary.txt", char::from(92), char::from(92));
 
-        let malicious = format!("skills/pdf/{}{}outside-canary.txt", char::from(92), char::from(92));
-        let rel = checked_relative_path(&malicious, "skills/pdf/")
-            .expect("original importer guard accepts this Windows path");
+        // Exercise the exact path filter and validator used by import().
+        assert!(malicious.starts_with(prefix));
+        let rel = checked_relative_path(&malicious, prefix)
+            .expect("slash-only guard incorrectly accepts backslash parent components");
 
-        let target = dest_root.join(rel);
-        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
-        std::fs::write(&target, "harmless external canary").unwrap();
+        // Exercise the same writer used by import(), not a copied PathBuf demonstration.
+        write_fetched_files(temp.path(), "pdf", vec![(rel, b"harmless external canary".to_vec())])
+            .await.unwrap();
 
-        let escaped = temp.path().join("outside-canary.txt");
-        assert!(escaped.exists(), "file escaped the skill destination");
+        let escaped = skills::skills_dir(temp.path()).join("outside-canary.txt");
+        assert!(escaped.exists(), "file was not written outside the skill destination");
         assert_eq!(std::fs::read_to_string(escaped).unwrap(), "harmless external canary");
     }
 
