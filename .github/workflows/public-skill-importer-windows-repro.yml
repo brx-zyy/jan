@@ -53,6 +53,8 @@ jobs:
             New-Item -ItemType Directory -Force (Split-Path $resource) | Out-Null
             if (-not (Test-Path $resource)) { [System.IO.File]::WriteAllBytes($resource, [byte[]]@()) }
           }
+          $dll = 'src-tauri/resources/bin/jan-poc-placeholder.dll'
+          if (-not (Test-Path $dll)) { [System.IO.File]::WriteAllBytes($dll, [byte[]]@()) }
 
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
