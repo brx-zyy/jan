@@ -1,0 +1,16 @@
+name: Public skill importer Windows path repro
+
+on:
+  push:
+    branches:
+      - security/poc-public-skill-importer-windows-path
+
+jobs:
+  windows-path-repro:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run focused Windows path test
+        shell: pwsh
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --lib public_skill_importer_rejects_backslash_parent_components -- --nocapture --test-threads=1
