@@ -48,4 +48,4 @@ jobs:
 
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
