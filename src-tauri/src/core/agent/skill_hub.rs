@@ -129,10 +129,7 @@ pub async fn import(store: &Path, name: &str) -> Result<(), String> {
         let prefix = prefix.clone();
         async move {
             // Path came from GitHub and is prefix-checked; guard components anyway.
-            let rel = path.strip_prefix(&prefix).unwrap_or(&path).to_string();
-            if rel.split('/').any(|seg| seg == "..") {
-                return Err(format!("ERROR: unsafe path '{path}'"));
-            }
+            let rel = checked_relative_path(&path, &prefix)?;
             let resp = client
                 .get(format!("{RAW_BASE}{path}"))
                 .send()
@@ -171,9 +168,37 @@ pub async fn import(store: &Path, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn checked_relative_path(path: &str, prefix: &str) -> Result<String, String> {
+    let rel = path.strip_prefix(prefix).unwrap_or(path).to_string();
+    if rel.split(|c| c == '/' || c == char::from(92)).any(|seg| seg == "..") {
+        return Err(format!("ERROR: unsafe path '{path}'"));
+    }
+    Ok(rel)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn public_skill_importer_rejects_backslash_parent_components() {
+        let temp = tempfile::tempdir().unwrap();
+        let dest_root = temp.path().join("skills").join("pdf");
+        std::fs::create_dir_all(&dest_root).unwrap();
+
+        let malicious = format!("skills/pdf/{}{}outside-canary.txt", char::from(92), char::from(92));
+        let rel = checked_relative_path(&malicious, "skills/pdf/")
+            .expect("current importer accepts this Windows path");
+
+        let target = dest_root.join(rel);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, "harmless external canary").unwrap();
+
+        let escaped = temp.path().join("outside-canary.txt");
+        assert!(escaped.exists(), "file escaped the skill destination");
+        assert_eq!(std::fs::read_to_string(escaped).unwrap(), "harmless external canary");
+    }
 
     #[test]
     fn skill_name_extracted_from_skill_md_path() {
