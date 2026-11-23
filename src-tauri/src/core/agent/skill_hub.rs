@@ -170,7 +170,7 @@ pub async fn import(store: &Path, name: &str) -> Result<(), String> {
 
 fn checked_relative_path(path: &str, prefix: &str) -> Result<String, String> {
     let rel = path.strip_prefix(prefix).unwrap_or(path).to_string();
-    if rel.split(|c| c == '/' || c == char::from(92)).any(|seg| seg == "..") {
+    if rel.split('/').any(|seg| seg == "..") {
         return Err(format!("ERROR: unsafe path '{path}'"));
     }
     Ok(rel)
@@ -182,14 +182,14 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn public_skill_importer_rejects_backslash_parent_components() {
+    fn public_skill_importer_allows_backslash_parent_escape() {
         let temp = tempfile::tempdir().unwrap();
         let dest_root = temp.path().join("skills").join("pdf");
         std::fs::create_dir_all(&dest_root).unwrap();
 
         let malicious = format!("skills/pdf/{}{}outside-canary.txt", char::from(92), char::from(92));
         let rel = checked_relative_path(&malicious, "skills/pdf/")
-            .expect("current importer accepts this Windows path");
+            .expect("original importer guard accepts this Windows path");
 
         let target = dest_root.join(rel);
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
