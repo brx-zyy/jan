@@ -207,7 +207,7 @@ mod tests {
         write_fetched_files(temp.path(), "pdf", vec![(rel, b"harmless external canary".to_vec())])
             .await.unwrap();
 
-        let escaped = skills::skills_dir(temp.path()).join("outside-canary.txt");
+        let escaped = temp.path().join("outside-canary.txt");
         assert!(escaped.exists(), "file was not written outside the skill destination");
         assert_eq!(std::fs::read_to_string(escaped).unwrap(), "harmless external canary");
     }
