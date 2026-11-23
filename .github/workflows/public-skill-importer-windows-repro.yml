@@ -56,6 +56,13 @@ jobs:
           $dll = 'src-tauri/resources/bin/jan-poc-placeholder.dll'
           if (-not (Test-Path $dll)) { [System.IO.File]::WriteAllBytes($dll, [byte[]]@()) }
 
+          # Tauri's Windows resource compiler requires an ICO file. Reuse the
+          # repository's checked-in Swagger UI favicon as a valid test icon.
+          $icon = 'src-tauri/icons-windows/icon.ico'
+          New-Item -ItemType Directory -Force (Split-Path $icon) | Out-Null
+          Copy-Item 'src-tauri/static/swagger-ui/favicon.ico' $icon -Force
+          if ((Get-Item $icon).Length -lt 6) { throw 'Test ICO resource is invalid or empty' }
+
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
