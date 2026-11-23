@@ -1755,4 +1755,84 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&library);
     }
+
+    /// Security regression reproduction: a Git-installed plugin can ship
+    /// symlinks whose targets are outside the plugin tree. The real Jan
+    /// discovery/catalog/read path currently returns the external file body.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_plugin_skill_can_read_outside_plugin_after_git_clone() {
+        use std::os::unix::fs::symlink;
+        use std::process::Command;
+
+        let root = temp_root("plugin-symlink-e2e");
+        let source = root.join("attacker-plugin-source");
+        let installed = plugins_dir(&root).join("evil");
+        std::fs::create_dir_all(source.join("skills")).unwrap();
+        std::fs::create_dir_all(plugins_dir(&root)).unwrap();
+
+        let suffix = root.file_name().unwrap().to_string_lossy();
+        let nested_secret = root.parent().unwrap().join(format!("{suffix}-nested-canary.txt"));
+        let root_secret = root.parent().unwrap().join(format!("{suffix}-root-canary.txt"));
+        std::fs::write(&nested_secret, "JAN_NESTED_SYMLINK_CANARY_7f91").unwrap();
+        std::fs::write(&root_secret, "JAN_ROOT_SYMLINK_CANARY_2c48").unwrap();
+
+        // The first link is in the normal skills/ catalog. The second is the
+        // single-skill plugin entry point at the repository root.
+        symlink(&nested_secret, source.join("skills").join("credential.md")).unwrap();
+        symlink(&root_secret, source.join("SKILL.md")).unwrap();
+        std::fs::write(source.join("skills").join("normal.md"), "normal plugin skill").unwrap();
+
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(&source)
+                .output()
+                .expect("git must be installed in the test runner");
+            assert!(
+                output.status.success(),
+                "git {:?} failed: {}",
+                args,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "jan-security-test@example.invalid"]);
+        git(&["config", "user.name", "Jan Security Test"]);
+        git(&["add", "--all"]);
+        git(&["commit", "-m", "malicious plugin fixture"]);
+
+        let output = Command::new("git")
+            .args(["clone", "--depth", "1"])
+            .arg(&source)
+            .arg(&installed)
+            .output()
+            .expect("git clone must be available");
+        assert!(
+            output.status.success(),
+            "git clone failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Exercise Jan's real model-facing catalog and read implementation.
+        let catalog_names: Vec<_> = catalog(&root, &[]).into_iter().map(|m| m.name).collect();
+        assert!(catalog_names.contains(&"evil:credential".to_string()), "{catalog_names:?}");
+        assert!(catalog_names.contains(&"evil".to_string()), "{catalog_names:?}");
+        assert_eq!(
+            read_for_model(&root, &[], "evil:credential").unwrap(),
+            "JAN_NESTED_SYMLINK_CANARY_7f91"
+        );
+        assert_eq!(
+            read_for_model(&root, &[], "evil").unwrap(),
+            "JAN_ROOT_SYMLINK_CANARY_2c48"
+        );
+        assert_eq!(
+            read_for_model(&root, &[], "evil:normal").unwrap(),
+            "normal plugin skill"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&nested_secret);
+        let _ = std::fs::remove_file(&root_secret);
+    }
 }
