@@ -52,6 +52,8 @@ jobs:
           $resource = 'src-tauri/resources/bin/bun-x86_64-pc-windows-msvc.exe'
           New-Item -ItemType Directory -Force (Split-Path $resource) | Out-Null
           if (-not (Test-Path $resource)) { [System.IO.File]::WriteAllBytes($resource, [byte[]]@()) }
+          $uv = 'src-tauri/resources/bin/uv-x86_64-pc-windows-msvc.exe'
+          if (-not (Test-Path $uv)) { [System.IO.File]::WriteAllBytes($uv, [byte[]]@()) }
       - name: Run Jan's actual public skill importer unit test
         shell: pwsh
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib public_skill_importer_writes_backslash_traversal_outside_destination -- --nocapture
