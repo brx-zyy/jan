@@ -22,7 +22,7 @@ jobs:
               fs::create_dir_all(&skill_root).unwrap();
 
               // Exact guard used by the importer: only '/' is treated as a separator.
-              let path = format!("skills/pdf/{}{}outside-canary.txt", char::from(92), char::from(92));
+              let path = format!("skills/pdf/..{}..{}outside-canary.txt", char::from(92), char::from(92));
               let prefix = "skills/pdf/";
               let rel = path.strip_prefix(prefix).unwrap().to_string();
               assert!(!rel.split('/').any(|seg| seg == ".."), "guard unexpectedly rejected path");
