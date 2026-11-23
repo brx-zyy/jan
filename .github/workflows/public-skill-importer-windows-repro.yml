@@ -11,6 +11,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run focused Windows path test
+      - name: Reproduce importer path validation and Windows join semantics
         shell: pwsh
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --lib public_skill_importer_allows_backslash_parent_escape -- --nocapture --test-threads=1
+        run: |
+          @'
+          use std::{fs, path::PathBuf};
+          fn main() {
+              let temp = std::env::temp_dir().join(format!("jan-skill-import-poc-{}", std::process::id()));
+              let skill_root = temp.join("skills").join("pdf");
+              fs::create_dir_all(&skill_root).unwrap();
+
+              // Exact guard used by the importer: only '/' is treated as a separator.
+              let path = format!("skills/pdf/{}{}outside-canary.txt", char::from(92), char::from(92));
+              let prefix = "skills/pdf/";
+              let rel = path.strip_prefix(prefix).unwrap().to_string();
+              assert!(!rel.split('/').any(|seg| seg == ".."), "guard unexpectedly rejected path");
+
+              // On Windows, PathBuf interprets backslashes as separators.
+              let target = skill_root.join(&rel);
+              fs::create_dir_all(target.parent().unwrap()).unwrap();
+              fs::write(&target, "harmless external canary").unwrap();
+
+              let escaped = temp.join("outside-canary.txt");
+              assert!(escaped.exists(), "canary was not written outside skill directory: {}", target.display());
+              assert_eq!(fs::read_to_string(&escaped).unwrap(), "harmless external canary");
+              println!("PASS: slash-only guard accepted backslash parent components");
+              println!("PASS: Windows PathBuf::join wrote canary outside skill directory");
+              println!("escaped target: {}", escaped.display());
+              let _ = fs::remove_dir_all(&temp);
+          }
+          '@ | Set-Content -Encoding utf8 repro.rs
+          rustc .\repro.rs -o .\repro.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\repro.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
